@@ -1,0 +1,24 @@
+{
+  "name": "procurement-service",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Refinery procurement & PO lifecycle microservice",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node --inspect src/index.js",
+    "dev": "node --inspect --watch src/index.js"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "pg": "8.13.3",
+    "amqplib": "0.10.7",
+    "cors": "2.8.5",
+    "helmet": "8.1.0",
+    "compression": "1.8.0",
+    "pino": "9.6.0",
+    "pino-pretty": "13.0.0"
+  }
+}

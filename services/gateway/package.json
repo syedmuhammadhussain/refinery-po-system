@@ -1,0 +1,25 @@
+{
+  "name": "gateway",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "API Gateway for refinery PO system",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "nodemon --inspect src/index.js",
+    "dev": "nodemon --inspect --watch src/index.js"
+  },
+  "dependencies": {
+    "cors": "2.8.5",
+    "express": "5.2.1",
+    "helmet": "8.1.0",
+    "http-proxy-middleware": "3.0.5",
+    "pino": "9.6.0",
+    "pino-pretty": "13.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}

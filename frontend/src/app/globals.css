@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* ── Theme: CSS-first configuration (Tailwind v4) ── */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand blues */
+  --color-brand-50:  #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+  --color-brand-950: #172554;
+
+  /* Steel grays */
+  --color-steel-50:  #f8fafc;
+  --color-steel-100: #f1f5f9;
+  --color-steel-200: #e2e8f0;
+  --color-steel-300: #cbd5e1;
+  --color-steel-400: #94a3b8;
+  --color-steel-500: #64748b;
+  --color-steel-600: #475569;
+  --color-steel-700: #334155;
+  --color-steel-800: #1e293b;
+  --color-steel-900: #0f172a;
+  --color-steel-950: #020617;
+}
+
+/* ── Component classes ────────────────────────────── */
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg
+           bg-brand-600 text-white font-medium text-sm
+           hover:bg-brand-700 active:bg-brand-800
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg
+           bg-steel-100 text-steel-700 font-medium text-sm
+           hover:bg-steel-200 active:bg-steel-300
+           border border-steel-200 transition-colors;
+  }
+  .btn-success {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg
+           bg-emerald-600 text-white font-medium text-sm
+           hover:bg-emerald-700 transition-colors
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg
+           bg-red-600 text-white font-medium text-sm
+           hover:bg-red-700 transition-colors
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .input-field {
+    @apply w-full px-3 py-2.5 rounded-lg border border-steel-200
+           text-sm bg-white text-steel-900 placeholder:text-steel-400
+           focus:ring-2 focus:ring-brand-500 focus:border-brand-500
+           outline-hidden transition-colors;
+  }
+  .card {
+    @apply bg-white rounded-xl border border-steel-200 shadow-sm;
+  }
+  .badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold;
+  }
+
+  /* Status badges */
+  .status-DRAFT     { @apply bg-steel-100 text-steel-600; }
+  .status-SUBMITTED { @apply bg-amber-100 text-amber-700; }
+  .status-APPROVED  { @apply bg-emerald-100 text-emerald-700; }
+  .status-REJECTED  { @apply bg-red-100 text-red-700; }
+  .status-FULFILLED { @apply bg-brand-100 text-brand-700; }
+
+  /* Loading skeleton */
+  .skeleton {
+    @apply bg-steel-200 animate-pulse;
+  }
+}
+
+/* ── Base styles ──────────────────────────────────── */
+body {
+  font-family: var(--font-sans);
+  @apply bg-steel-50 text-steel-900 antialiased;
+}

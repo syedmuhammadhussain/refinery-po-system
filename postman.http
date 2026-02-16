@@ -1,0 +1,15 @@
+@orderId=0cb970eb-ff16-434b-97b0-9ddee7a1dfbd
+
+
+### Line Items
+GET http://localhost:4002/api/procurement/purchase-orders
+Content-Type: application/json
+
+
+
+
+### Add Line Items
+POST http://localhost:4002/api/procurement/purchase-orders/{{orderId}}/lines
+Content-Type: application/json
+
+{"catalogItemId":"TOL-0509","quantity":1}
