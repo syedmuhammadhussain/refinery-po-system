@@ -114,8 +114,10 @@ const CatalogItem = {
     `;
 
     const compatQuery = `
-      SELECT compatible_item_id, relationship_type, notes
-      FROM item_compatibility WHERE item_id = $1
+      SELECT ic.compatible_id, ci.name AS compatible_name, ci.model AS compatible_model
+      FROM item_compatibility ic
+      JOIN catalog_items ci ON ci.id = ic.compatible_id
+      WHERE ic.item_id = $1
     `;
 
     const [itemRes, specsRes, compatRes] = await Promise.all([

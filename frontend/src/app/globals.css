@@ -83,6 +83,15 @@
   }
 }
 
+/* ── Scrollbar utility for horizontal tab scrolling ── */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Base styles ──────────────────────────────────── */
 body {
   font-family: var(--font-sans);

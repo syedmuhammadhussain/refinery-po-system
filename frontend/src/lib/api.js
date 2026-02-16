@@ -1,11 +1,28 @@
 import axios from 'axios';
 
-const API_BASE = typeof window !== 'undefined'
-  ? (process.env.NEXT_PUBLIC_API_URL || '/api')
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://gateway:4000/api');
-
+/**
+ * API client for the Refinery PO System.
+ *
+ * HOW REQUESTS FLOW:
+ *
+ * Browser → http://localhost:3000/api/catalog/items   (relative URL, same origin)
+ *        ↓
+ * Next.js server rewrites /api/* to the gateway:
+ *   - In Docker:  http://gateway:4000/api/*  (via INTERNAL_API_URL env var)
+ *   - Locally:    http://localhost:4000/api/*  (default)
+ *        ↓
+ * Gateway proxies to the correct microservice:
+ *   /api/catalog/*      → catalog-service:4001
+ *   /api/procurement/*  → procurement-service:4002
+ *
+ * WHY /api (RELATIVE URL)?
+ * On the client (browser), we use '/api' which means requests go to the
+ * SAME origin as the page (localhost:3000). Next.js rewrites then forward
+ * them to the gateway. This avoids CORS issues and works in both Docker
+ * and local development.
+ */
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: '/api',
   timeout: 15_000,
   headers: { 'Content-Type': 'application/json' },
 });

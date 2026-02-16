@@ -65,28 +65,9 @@ async function fetchCatalogItem(catalogItemId) {
 
 // ════════════════════════════════════════════════════
 //  PO CRUD
-//
-//  All routes are mounted at /api/procurement/purchase-orders
-//  (see index.js: app.use('/api/procurement/purchase-orders', procurementRoutes))
-//
-//  So router.get('/') means GET /api/procurement/purchase-orders
-//  And router.get('/:id') means GET /api/procurement/purchase-orders/:id
 // ════════════════════════════════════════════════════
 
-/**
- * POST /
- * Create a new Draft PO.
- *
- * Body: { supplierCode, supplierName, idempotencyKey? }
- *
- * What it does:
- *   1. Creates a PO record with status=DRAFT
- *   2. The DB trigger auto-generates po_number when status → SUBMITTED (not yet)
- *   3. Records a timeline entry: null → DRAFT
- *   4. If idempotencyKey matches an existing PO, returns that instead (no duplicate)
- *
- * Returns: The PO object { id, po_number, status, supplier_code, ... }
- */
+// POST / — Create draft PO
 router.post('/', async (req, res) => {
   const { supplierCode, supplierName, idempotencyKey } = req.body;
   if (!supplierCode || !supplierName) {
@@ -96,14 +77,7 @@ router.post('/', async (req, res) => {
   res.status(201).json(po);
 });
 
-/**
- * GET /
- * List all POs with optional status filter and pagination.
- *
- * Query: ?status=DRAFT&page=1&limit=15
- *
- * Returns: { purchaseOrders: [...], pagination: { page, limit, total, totalPages } }
- */
+// GET / — List POs
 router.get('/', async (req, res) => {
   const { status, page = '1', limit = '15' } = req.query;
   const result = await PurchaseOrder.list({
@@ -114,36 +88,20 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
-/**
- * GET /:id
- * Get full PO detail including line items and status timeline.
- *
- * Returns: { id, po_number, status, ..., lineItems: [...], timeline: [...] }
- */
+// GET /:id — Get PO detail
 router.get('/:id', async (req, res) => {
   const po = await PurchaseOrder.findById(req.params.id);
   if (!po) return res.status(404).json({ error: 'Purchase order not found' });
   res.json(po);
 });
 
-/**
- * PATCH /:id
- * Update draft PO header fields (only works when status=DRAFT).
- *
- * Body: { requestor?, cost_center?, needed_by_date?, payment_terms?, notes? }
- *
- * Returns: Updated PO object
- */
+// PATCH /:id — Update draft header
 router.patch('/:id', async (req, res) => {
   const po = await PurchaseOrder.updateDraft(req.params.id, req.body);
   res.json(po);
 });
 
-/**
- * DELETE /:id
- * Delete a draft PO (only works when status=DRAFT).
- * Also deletes all line items (CASCADE).
- */
+// DELETE /:id — Delete draft
 router.delete('/:id', async (req, res) => {
   await PurchaseOrder.deleteDraft(req.params.id);
   res.status(204).end();
@@ -151,38 +109,16 @@ router.delete('/:id', async (req, res) => {
 
 // ════════════════════════════════════════════════════
 //  LINE ITEMS
-//
-//  These manage line items within a PO.
-//  Each line item = one catalog item with a quantity.
 // ════════════════════════════════════════════════════
 
-/**
- * GET /:id/lines
- * List all line items for a PO.
- *
- * Returns: { lineItems: [...] }
- */
+// GET /:id/lines — List line items for a PO
 router.get('/:id/lines', async (req, res) => {
   const po = await PurchaseOrder.findById(req.params.id);
   if (!po) return res.status(404).json({ error: 'Purchase order not found' });
   res.json({ lineItems: po.lineItems });
 });
 
-/**
- * POST /:id/lines
- * Add a catalog item as a line item to the PO.
- *
- * Body: { catalogItemId, quantity? }
- *
- * What it does:
- *   1. Calls the catalog service to get live item data (price, lead time, specs)
- *   2. Creates a "snapshot" — the price at the time of adding is locked in
- *   3. The DB trigger enforces single-supplier: if this item's supplier doesn't
- *      match the PO's supplier, it throws a 409 Conflict
- *   4. The DB trigger auto-recalculates the PO total_amount
- *
- * Returns: The created line item
- */
+// POST /:id/lines — Add line item (fetches catalog snapshot)
 router.post('/:id/lines', async (req, res) => {
   const { catalogItemId, quantity = 1 } = req.body;
   if (!catalogItemId) {
@@ -207,15 +143,7 @@ router.post('/:id/lines', async (req, res) => {
   res.status(201).json(line);
 });
 
-/**
- * PATCH /:id/lines/:lineId
- * Update line item quantity.
- *
- * Body: { quantity }
- * The DB trigger auto-recalculates line_total and PO total_amount.
- *
- * Returns: Updated line item
- */
+// PATCH /:id/lines/:lineId — Update line quantity
 router.patch('/:id/lines/:lineId', async (req, res) => {
   const { quantity } = req.body;
   if (!quantity || quantity < 1) {
@@ -225,11 +153,7 @@ router.patch('/:id/lines/:lineId', async (req, res) => {
   res.json(line);
 });
 
-/**
- * DELETE /:id/lines/:lineId
- * Remove a line item from the PO.
- * The DB trigger auto-recalculates PO total_amount.
- */
+// DELETE /:id/lines/:lineId — Remove line item
 router.delete('/:id/lines/:lineId', async (req, res) => {
   await PurchaseOrder.removeLineItem(req.params.id, req.params.lineId);
   res.status(204).end();
@@ -240,27 +164,9 @@ router.delete('/:id/lines/:lineId', async (req, res) => {
 //
 //  PO lifecycle:  DRAFT → SUBMITTED → APPROVED → FULFILLED
 //                                   ↘ REJECTED
-//
-//  Each transition:
-//    1. Validates the current status allows the transition
-//    2. Updates the PO status
-//    3. Records a timeline entry (audit trail)
 // ════════════════════════════════════════════════════
 
-/**
- * POST /:id/submit
- * Submit a draft PO for approval.
- *
- * What it does:
- *   1. Validates PO is in DRAFT status
- *   2. Validates PO has at least one line item
- *   3. Generates a PO number (PO-YYYY-NNNNN) via DB sequence
- *   4. Changes status to SUBMITTED
- *   5. Records timeline: DRAFT → SUBMITTED
- *
- * Body: { changedBy?, notes? }
- * Returns: Updated PO with po_number
- */
+// POST /:id/submit
 router.post('/:id/submit', async (req, res) => {
   const { changedBy, notes } = req.body;
   const po = await PurchaseOrder.submit(req.params.id, { changedBy, notes });
@@ -268,13 +174,7 @@ router.post('/:id/submit', async (req, res) => {
   res.json(po);
 });
 
-/**
- * POST /:id/approve
- * Approve a submitted PO.
- * Transition: SUBMITTED → APPROVED
- *
- * Body: { changedBy?, notes? }
- */
+// POST /:id/approve
 router.post('/:id/approve', async (req, res) => {
   const { changedBy = 'Approver', notes = 'PO approved' } = req.body;
   const po = await PurchaseOrder.transitionStatus(req.params.id, 'APPROVED', { changedBy, notes });
@@ -282,13 +182,7 @@ router.post('/:id/approve', async (req, res) => {
   res.json(po);
 });
 
-/**
- * POST /:id/reject
- * Reject a submitted PO.
- * Transition: SUBMITTED → REJECTED (terminal state)
- *
- * Body: { changedBy?, notes? }
- */
+// POST /:id/reject
 router.post('/:id/reject', async (req, res) => {
   const { changedBy = 'Approver', notes = 'PO rejected' } = req.body;
   const po = await PurchaseOrder.transitionStatus(req.params.id, 'REJECTED', { changedBy, notes });
@@ -296,13 +190,7 @@ router.post('/:id/reject', async (req, res) => {
   res.json(po);
 });
 
-/**
- * POST /:id/fulfill
- * Mark an approved PO as fulfilled (goods received).
- * Transition: APPROVED → FULFILLED (terminal state)
- *
- * Body: { changedBy?, notes? }
- */
+// POST /:id/fulfill
 router.post('/:id/fulfill', async (req, res) => {
   const { changedBy = 'Warehouse', notes = 'PO fulfilled' } = req.body;
   const po = await PurchaseOrder.transitionStatus(req.params.id, 'FULFILLED', { changedBy, notes });

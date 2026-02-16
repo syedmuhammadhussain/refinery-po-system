@@ -1,346 +1,374 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
-import useDraftStore from '../../../store/draftStore.js';
-import { procurementApi } from '../../../lib/api.js';
-import Link from 'next/link';
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useParams, useRouter } from "next/navigation";
+import { procurementApi } from "../../../lib/api.js";
 import {
-  ShoppingCart, FileText, Eye, Send, ArrowLeft, ArrowRight,
-  Trash2, Plus, Minus, Package, Loader2, AlertTriangle, Check,
-} from 'lucide-react';
+  ArrowLeft,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Package,
+  Loader2,
+  User,
+  Building,
+  Calendar,
+  CreditCard,
+} from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
-const STEPS = [
-  { id: 'cart',   label: 'Line Items',      icon: ShoppingCart },
-  { id: 'header', label: 'PO Details',       icon: FileText },
-  { id: 'review', label: 'Review & Submit',  icon: Eye },
-];
+const statusColors = {
+  DRAFT: "bg-steel-500",
+  SUBMITTED: "bg-amber-500",
+  APPROVED: "bg-emerald-500",
+  REJECTED: "bg-red-500",
+  FULFILLED: "bg-brand-600",
+};
 
-export default function NewPurchaseOrderPage() {
+export default function PODetailPage() {
+  const { id } = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const draft = useDraftStore();
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [actionNotes, setActionNotes] = useState("");
 
-  const currentStepIdx = STEPS.findIndex((s) => s.id === draft.step);
+  const {
+    data: po,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["po", id],
+    queryFn: () => procurementApi.getPO(id),
+    enabled: !!id,
+  });
 
-  // ── No draft? Redirect to catalog ────────────────
-  if (!draft.poId) {
+  const handleAction = async (action) => {
+    setActionLoading(action);
+    try {
+      const payload = {
+        changedBy: "Buyer",
+        notes: actionNotes || `PO ${action}`,
+      };
+      if (action === "approve") await procurementApi.approvePO(id, payload);
+      else if (action === "reject") await procurementApi.rejectPO(id, payload);
+      else if (action === "fulfill")
+        await procurementApi.fulfillPO(id, payload);
+      queryClient.invalidateQueries({ queryKey: ["po", id] });
+      queryClient.invalidateQueries({ queryKey: ["pos-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      setActionNotes("");
+    } catch (err) {
+      alert(err.response?.data?.error || "Action failed");
+    }
+    setActionLoading(null);
+  };
+
+  if (isLoading)
     return (
-      <div className="card p-12 text-center">
-        <Package size={48} className="mx-auto text-steel-300 mb-4" />
-        <div className="text-lg font-semibold text-steel-500">No active draft</div>
-        <div className="text-sm text-steel-400 mt-1 mb-4">
-          Browse the catalog and add items to start a purchase order
-        </div>
-        <Link href="/catalog" className="btn-primary">Browse Catalog</Link>
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={32} className="animate-spin text-brand-500" />
       </div>
     );
-  }
 
-  // ── Quantity handlers ────────────────────────────
-  const handleUpdateQty = async (line, delta) => {
-    const newQty = Math.max(1, line.quantity + delta);
-    try {
-      await procurementApi.updateLineItem(draft.poId, line.id, { quantity: newQty });
-      draft.updateItemQty(line.id, newQty);
-    } catch (err) {
-      console.error('Failed to update quantity:', err);
-    }
-  };
+  if (error || !po)
+    return (
+      <div className="card p-8 sm:p-12 text-center">
+        <div className="text-lg font-semibold text-steel-500">
+          Purchase order not found
+        </div>
+        <Link href="/purchase-orders" className="btn-primary mt-4 inline-flex">
+          Back to POs
+        </Link>
+      </div>
+    );
 
-  const handleRemoveLine = async (lineId) => {
-    try {
-      await procurementApi.removeLineItem(draft.poId, lineId);
-      draft.removeItem(lineId);
-      // If no items left, reset draft
-      if (draft.items.length <= 1) {
-        await procurementApi.deleteDraft(draft.poId).catch(() => {});
-        draft.clearDraft();
-      }
-    } catch (err) {
-      console.error('Failed to remove line:', err);
-    }
-  };
-
-  // ── Submit PO ────────────────────────────────────
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      // Update header first
-      await procurementApi.updateDraft(draft.poId, {
-        requestor: draft.requestor,
-        cost_center: draft.costCenter,
-        needed_by_date: draft.neededByDate || null,
-        payment_terms: draft.paymentTerms,
-        notes: draft.notes,
-      });
-
-      // Submit
-      await procurementApi.submitPO(draft.poId, {
-        changedBy: draft.requestor || 'Buyer',
-        notes: 'PO submitted for approval',
-      });
-
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-      draft.clearDraft();
-      router.push('/purchase-orders');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to submit PO');
-    }
-    setSubmitting(false);
-  };
-
-  const handleDiscardDraft = async () => {
-    if (!confirm('Discard this draft? All items will be removed.')) return;
-    try {
-      await procurementApi.deleteDraft(draft.poId).catch(() => {});
-    } catch { /* ignore */ }
-    draft.clearDraft();
-    router.push('/catalog');
-  };
-
-  const draftTotal = draft.items.reduce(
-    (sum, line) => sum + line.quantity * parseFloat(line.unit_price || 0),
-    0
-  );
+  const lines = po.lineItems || [];
+  const timeline = po.timeline || [];
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">New Purchase Order</h1>
-          <p className="text-steel-500 mt-1">
-            {draft.supplierName} · {draft.items.length} item{draft.items.length !== 1 ? 's' : ''} · ${draftTotal.toLocaleString()}
-          </p>
-        </div>
-        <button onClick={handleDiscardDraft} className="btn-secondary text-red-600 hover:bg-red-50">
-          <Trash2 size={16} /> Discard
+      {/* Header — responsive */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-5 sm:mb-6">
+        <button
+          onClick={() => router.push("/purchase-orders")}
+          className="btn-secondary p-2 self-start"
+        >
+          <ArrowLeft size={18} />
         </button>
-      </div>
-
-      {/* Step indicator */}
-      <div className="flex items-center gap-2 mb-8">
-        {STEPS.map((step, idx) => {
-          const active = idx === currentStepIdx;
-          const completed = idx < currentStepIdx;
-          return (
-            <div key={step.id} className="flex items-center gap-2">
-              {idx > 0 && <div className={`w-12 h-0.5 ${completed ? 'bg-brand-500' : 'bg-steel-200'}`} />}
-              <button
-                onClick={() => draft.setStep(step.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  active ? 'bg-brand-600 text-white' :
-                  completed ? 'bg-brand-100 text-brand-700' :
-                  'bg-steel-100 text-steel-500'
-                }`}
-              >
-                {completed ? <Check size={16} /> : <step.icon size={16} />}
-                {step.label}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-          <AlertTriangle size={20} className="text-red-600 mt-0.5" />
-          <div className="flex-1 text-sm text-red-700">{error}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <h1 className="text-xl sm:text-2xl font-bold">
+              {po.po_number || "Draft PO"}
+            </h1>
+            <span className={`badge status-${po.status} text-xs sm:text-sm`}>
+              {po.status}
+            </span>
+          </div>
+          <div className="text-xs sm:text-sm text-steel-500 mt-1">
+            {po.supplier_name} · Created{" "}
+            {new Date(po.created_at).toLocaleDateString()}
+          </div>
         </div>
-      )}
+        <div className="text-left sm:text-right">
+          <div className="text-xl sm:text-2xl font-bold">
+            ${parseFloat(po.total_amount).toLocaleString()}
+          </div>
+          <div className="text-xs sm:text-sm text-steel-500">
+            {lines.length} line item{lines.length !== 1 ? "s" : ""}
+          </div>
+        </div>
+      </div>
 
-      {/* ── Step 1: Cart ──────────────────────────── */}
-      {draft.step === 'cart' && (
-        <div className="space-y-4">
-          <div className="card">
-            <div className="px-6 py-4 border-b border-steel-100 flex items-center justify-between">
-              <h2 className="font-semibold text-steel-700">Line Items</h2>
-              <Link href="/catalog" className="text-sm text-brand-600 hover:text-brand-700 font-medium">
-                <Plus size={14} className="inline mr-1" />Add items
-              </Link>
-            </div>
-            <div className="divide-y divide-steel-100">
-              {draft.items.map((line) => (
-                <div key={line.id} className="flex items-center gap-4 px-6 py-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{line.item_name}</div>
-                    <div className="text-xs text-steel-400">{line.item_model} · ${parseFloat(line.unit_price).toLocaleString()} each</div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Left: Details + Lines */}
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+          {/* Order details */}
+          <div className="card p-4 sm:p-6">
+            <h2 className="font-semibold mb-3 sm:mb-4 text-steel-700 text-sm sm:text-base">
+              Order Details
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              {[
+                { icon: User, label: "Requestor", value: po.requestor },
+                { icon: Building, label: "Cost Center", value: po.cost_center },
+                {
+                  icon: Calendar,
+                  label: "Needed By",
+                  value: po.needed_by_date
+                    ? new Date(po.needed_by_date).toLocaleDateString()
+                    : null,
+                },
+                { icon: CreditCard, label: "Payment", value: po.payment_terms },
+              ].map(({ icon: Icon, label, value }) => (
+                <div key={label} className="flex items-start gap-2">
+                  <Icon size={14} className="text-steel-400 mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs text-steel-400">{label}</div>
+                    <div className="text-sm font-medium truncate">
+                      {value || "—"}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => handleUpdateQty(line, -1)} disabled={line.quantity <= 1} className="btn-secondary p-1.5">
-                      <Minus size={14} />
-                    </button>
-                    <span className="w-8 text-center font-semibold text-sm">{line.quantity}</span>
-                    <button onClick={() => handleUpdateQty(line, 1)} className="btn-secondary p-1.5">
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                  <div className="text-right w-28">
-                    <div className="font-bold text-sm">${(line.quantity * parseFloat(line.unit_price)).toLocaleString()}</div>
-                  </div>
-                  <button onClick={() => handleRemoveLine(line.id)} className="text-red-400 hover:text-red-600 p-1">
-                    <Trash2 size={16} />
-                  </button>
                 </div>
               ))}
             </div>
-            <div className="px-6 py-4 border-t border-steel-100 flex justify-between items-center bg-steel-50 rounded-b-xl">
-              <span className="font-semibold">Estimated Total</span>
-              <span className="text-xl font-bold">${draftTotal.toLocaleString()}</span>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <button onClick={() => draft.setStep('header')} className="btn-primary" disabled={draft.items.length === 0}>
-              Continue <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Step 2: Header Details ────────────────── */}
-      {draft.step === 'header' && (
-        <div className="space-y-4">
-          <div className="card p-6 space-y-4">
-            <h2 className="font-semibold text-steel-700 mb-2">Purchase Order Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-steel-600 mb-1">Requestor *</label>
-                <input
-                  type="text"
-                  value={draft.requestor}
-                  onChange={(e) => draft.setHeader({ requestor: e.target.value })}
-                  placeholder="Your name"
-                  className="input-field"
-                />
+            {po.notes && (
+              <div className="mt-4 p-3 bg-steel-50 rounded-lg text-sm text-steel-600">
+                {po.notes}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-steel-600 mb-1">Cost Center *</label>
-                <input
-                  type="text"
-                  value={draft.costCenter}
-                  onChange={(e) => draft.setHeader({ costCenter: e.target.value })}
-                  placeholder="e.g. CC-4500-OPS"
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-steel-600 mb-1">Needed By Date</label>
-                <input
-                  type="date"
-                  value={draft.neededByDate}
-                  onChange={(e) => draft.setHeader({ neededByDate: e.target.value })}
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-steel-600 mb-1">Payment Terms</label>
-                <select
-                  value={draft.paymentTerms}
-                  onChange={(e) => draft.setHeader({ paymentTerms: e.target.value })}
-                  className="input-field"
-                >
-                  <option>Net 30</option>
-                  <option>Net 45</option>
-                  <option>Net 60</option>
-                  <option>Due on Receipt</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-steel-600 mb-1">Notes</label>
-              <textarea
-                value={draft.notes}
-                onChange={(e) => draft.setHeader({ notes: e.target.value })}
-                placeholder="Optional notes for the supplier…"
-                className="input-field"
-                rows={3}
-              />
-            </div>
-          </div>
-          <div className="flex justify-between">
-            <button onClick={() => draft.setStep('cart')} className="btn-secondary">
-              <ArrowLeft size={16} /> Back
-            </button>
-            <button
-              onClick={() => draft.setStep('review')}
-              disabled={!draft.requestor || !draft.costCenter}
-              className="btn-primary"
-            >
-              Review <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Step 3: Review & Submit ───────────────── */}
-      {draft.step === 'review' && (
-        <div className="space-y-4">
-          <div className="card p-6">
-            <h2 className="font-semibold text-steel-700 mb-4">Review Order</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div><div className="text-xs text-steel-400">Supplier</div><div className="text-sm font-medium">{draft.supplierName}</div></div>
-              <div><div className="text-xs text-steel-400">Requestor</div><div className="text-sm font-medium">{draft.requestor}</div></div>
-              <div><div className="text-xs text-steel-400">Cost Center</div><div className="text-sm font-medium">{draft.costCenter}</div></div>
-              <div><div className="text-xs text-steel-400">Payment Terms</div><div className="text-sm font-medium">{draft.paymentTerms}</div></div>
-            </div>
-            {draft.neededByDate && (
-              <div className="mb-4"><span className="text-xs text-steel-400">Needed By: </span><span className="text-sm font-medium">{draft.neededByDate}</span></div>
             )}
-            {draft.notes && (
-              <div className="mb-6 p-3 bg-steel-50 rounded-lg text-sm text-steel-600">{draft.notes}</div>
-            )}
+          </div>
 
-            {/* Items summary */}
-            <div className="border border-steel-200 rounded-lg overflow-hidden">
+          {/* Line items — desktop table + mobile cards */}
+          <div className="card">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-steel-100">
+              <h2 className="font-semibold text-steel-700 text-sm sm:text-base">
+                Line Items
+              </h2>
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-steel-50 text-left">
-                    <th className="px-4 py-2 font-semibold text-steel-600">Item</th>
-                    <th className="px-4 py-2 font-semibold text-steel-600 text-center">Qty</th>
-                    <th className="px-4 py-2 font-semibold text-steel-600 text-right">Unit Price</th>
-                    <th className="px-4 py-2 font-semibold text-steel-600 text-right">Total</th>
+                    <th className="px-6 py-3 font-semibold text-steel-600">
+                      Item
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-steel-600">
+                      Model
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-steel-600 text-center">
+                      Qty
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-steel-600 text-right">
+                      Unit Price
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-steel-600 text-center">
+                      Lead
+                    </th>
+                    <th className="px-6 py-3 font-semibold text-steel-600 text-right">
+                      Total
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-steel-100">
-                  {draft.items.map((line) => (
-                    <tr key={line.id}>
-                      <td className="px-4 py-3">
+                  {lines.map((line) => (
+                    <tr key={line.id} className="hover:bg-steel-50">
+                      <td className="px-6 py-4">
                         <div className="font-medium">{line.item_name}</div>
-                        <div className="text-xs text-steel-400">{line.item_model}</div>
+                        <div className="text-xs text-steel-400 font-mono">
+                          {line.catalog_item_id}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-center">{line.quantity}</td>
-                      <td className="px-4 py-3 text-right">${parseFloat(line.unit_price).toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-bold">${(line.quantity * parseFloat(line.unit_price)).toLocaleString()}</td>
+                      <td className="px-4 py-4 text-steel-600">
+                        {line.item_model}
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold">
+                        {line.quantity}
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        ${parseFloat(line.unit_price).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        {line.lead_time_days}d
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold">
+                        $
+                        {(
+                          line.quantity * parseFloat(line.unit_price)
+                        ).toLocaleString()}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="bg-steel-50 font-bold">
-                    <td colSpan={3} className="px-4 py-3 text-right">Total</td>
-                    <td className="px-4 py-3 text-right text-lg">${draftTotal.toLocaleString()}</td>
+                    <td colSpan={5} className="px-6 py-3 text-right">
+                      Total
+                    </td>
+                    <td className="px-6 py-3 text-right text-lg">
+                      ${parseFloat(po.total_amount).toLocaleString()}
+                    </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-          </div>
 
-          <div className="flex justify-between">
-            <button onClick={() => draft.setStep('header')} className="btn-secondary">
-              <ArrowLeft size={16} /> Back
-            </button>
-            <button onClick={handleSubmit} disabled={submitting} className="btn-primary bg-emerald-600 hover:bg-emerald-700">
-              {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-              Submit Purchase Order
-            </button>
+            {/* Mobile cards */}
+            <div className="sm:hidden divide-y divide-steel-100">
+              {lines.map((line) => (
+                <div key={line.id} className="p-4">
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="font-medium text-sm">{line.item_name}</div>
+                    <span className="font-bold text-sm shrink-0 ml-2">
+                      $
+                      {(
+                        line.quantity * parseFloat(line.unit_price)
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-xs text-steel-400 mb-2">
+                    {line.item_model} · {line.catalog_item_id}
+                  </div>
+                  <div className="flex gap-4 text-xs text-steel-500">
+                    <span>Qty: {line.quantity}</span>
+                    <span>
+                      ${parseFloat(line.unit_price).toLocaleString()} each
+                    </span>
+                    <span>{line.lead_time_days}d lead</span>
+                  </div>
+                </div>
+              ))}
+              <div className="p-4 bg-steel-50 flex justify-between font-bold">
+                <span>Total</span>
+                <span className="text-lg">
+                  ${parseFloat(po.total_amount).toLocaleString()}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* Right: Timeline + Actions */}
+        <div className="space-y-4 sm:space-y-6">
+          {/* Actions */}
+          {(po.status === "SUBMITTED" || po.status === "APPROVED") && (
+            <div className="card p-4 sm:p-5">
+              <h3 className="font-semibold mb-3 text-steel-700 text-sm sm:text-base">
+                Actions
+              </h3>
+              <textarea
+                value={actionNotes}
+                onChange={(e) => setActionNotes(e.target.value)}
+                placeholder="Optional notes…"
+                className="input-field mb-3 text-sm"
+                rows={2}
+              />
+              <div className="flex gap-2">
+                {po.status === "SUBMITTED" && (
+                  <>
+                    <button
+                      onClick={() => handleAction("approve")}
+                      disabled={!!actionLoading}
+                      className="btn-success flex-1 text-xs sm:text-sm"
+                    >
+                      {actionLoading === "approve" ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <CheckCircle size={14} />
+                      )}
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleAction("reject")}
+                      disabled={!!actionLoading}
+                      className="btn-danger flex-1 text-xs sm:text-sm"
+                    >
+                      {actionLoading === "reject" ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <XCircle size={14} />
+                      )}
+                      Reject
+                    </button>
+                  </>
+                )}
+                {po.status === "APPROVED" && (
+                  <button
+                    onClick={() => handleAction("fulfill")}
+                    disabled={!!actionLoading}
+                    className="btn-primary flex-1 text-xs sm:text-sm"
+                  >
+                    {actionLoading === "fulfill" ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Package size={14} />
+                    )}
+                    Mark Fulfilled
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Timeline */}
+          <div className="card p-4 sm:p-5">
+            <h3 className="font-semibold mb-4 text-steel-700 text-sm sm:text-base">
+              Status Timeline
+            </h3>
+            <div className="space-y-0">
+              {timeline.map((entry, i) => (
+                <div key={entry.id} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`w-3 h-3 rounded-full ${statusColors[entry.to_status] || "bg-steel-300"} ring-4 ring-white`}
+                    />
+                    {i < timeline.length - 1 && (
+                      <div className="w-0.5 flex-1 bg-steel-200 my-1" />
+                    )}
+                  </div>
+                  <div className="pb-5">
+                    <div className="font-medium text-sm">
+                      {entry.from_status ? `${entry.from_status} → ` : ""}
+                      {entry.to_status}
+                    </div>
+                    <div className="text-xs text-steel-400 mt-0.5">
+                      {new Date(entry.created_at).toLocaleString()} ·{" "}
+                      {entry.changed_by}
+                    </div>
+                    {entry.notes && (
+                      <div className="text-xs text-steel-500 mt-1">
+                        {entry.notes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

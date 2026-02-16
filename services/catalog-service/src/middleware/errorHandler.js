@@ -21,10 +21,18 @@ export default function errorHandler(err, _req, res, _next) {
   }
 
   const status = err.status || err.statusCode || 500;
-  const message = status < 500 ? err.message : 'Internal server error';
+
+  // Show the actual error message if:
+  //   - It's a client error (4xx)
+  //   - It's an upstream/gateway error (502, 503, 504) where we explicitly set err.status
+  //   - It's a known error where err.status was explicitly set by our code
+  //
+  // Hide the message only for truly unexpected 500 errors (unhandled exceptions)
+  const isExplicitError = err.status || err.statusCode; // was set intentionally
+  const message = (status < 500 || isExplicitError) ? err.message : 'Internal server error';
 
   if (status >= 500) {
-    logger.error({ err, stack: err.stack }, 'Unhandled server error');
+    logger.error({ err, status, stack: err.stack }, message);
   }
 
   res.status(status).json({ error: message });

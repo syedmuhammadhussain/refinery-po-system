@@ -1,28 +1,41 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 /**
  * Zustand 5 store for PO draft state.
  * Persists across page reloads via localStorage.
+ *
+ * STALE-STATE FIX:
+ * Previously, calling clearDraft() updated the sidebar (Zustand)
+ * but the dashboard still showed "1 DRAFT" because the React Query
+ * cache ('pos-dashboard') was never invalidated.
+ *
+ * Fix: Components that delete drafts on the server must ALSO call
+ * queryClient.invalidateQueries() for dashboard data. See useClearDraft hook.
  */
 const useDraftStore = create(
   persist(
-    (set, get) => ({
-      // Draft PO state
+    (set) => ({
+      // ── Draft PO state ────────────────────────────
       poId: null,
       supplierCode: null,
       supplierName: null,
       items: [],
-      step: 'cart', // 'cart' | 'header' | 'review'
+      step: "cart", // 'cart' | 'header' | 'review'
 
-      // Header fields
-      requestor: '',
-      costCenter: '',
-      neededByDate: '',
-      paymentTerms: 'Net 30',
-      notes: '',
+      // ── Header fields ─────────────────────────────
+      requestor: "",
+      costCenter: "",
+      neededByDate: "",
+      paymentTerms: "Net 30",
+      notes: "",
 
-      // Actions
+      // ── Hydration flag ────────────────────────────
+      // Prevents SSR/client mismatch: components should check
+      // _hydrated before rendering draft-dependent UI
+      _hydrated: false,
+
+      // ── Actions ───────────────────────────────────
       setDraft: (po) =>
         set({
           poId: po.id,
@@ -30,13 +43,12 @@ const useDraftStore = create(
           supplierName: po.supplier_name,
         }),
 
-      addItem: (line) =>
-        set((state) => ({ items: [...state.items, line] })),
+      addItem: (line) => set((state) => ({ items: [...state.items, line] })),
 
       updateItemQty: (lineId, quantity) =>
         set((state) => ({
           items: state.items.map((item) =>
-            item.id === lineId ? { ...item, quantity } : item
+            item.id === lineId ? { ...item, quantity } : item,
           ),
         })),
 
@@ -55,19 +67,18 @@ const useDraftStore = create(
           supplierCode: null,
           supplierName: null,
           items: [],
-          step: 'cart',
-          requestor: '',
-          costCenter: '',
-          neededByDate: '',
-          paymentTerms: 'Net 30',
-          notes: '',
+          step: "cart",
+          requestor: "",
+          costCenter: "",
+          neededByDate: "",
+          paymentTerms: "Net 30",
+          notes: "",
         }),
     }),
     {
-      name: 'refinery-po-draft',
+      name: "refinery-po-draft",
       storage: createJSONStorage(() => {
-        // SSR guard: return no-op storage on server
-        if (typeof window === 'undefined') {
+        if (typeof window === "undefined") {
           return {
             getItem: () => null,
             setItem: () => {},
@@ -76,8 +87,13 @@ const useDraftStore = create(
         }
         return localStorage;
       }),
-    }
-  )
+      onRehydrateStorage: () => {
+        return (state) => {
+          if (state) state._hydrated = true;
+        };
+      },
+    },
+  ),
 );
 
 export default useDraftStore;
