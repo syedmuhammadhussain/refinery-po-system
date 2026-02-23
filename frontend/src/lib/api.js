@@ -22,11 +22,9 @@ import axios from 'axios';
  * and local development.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
 const api = axios.create({
-  baseURL: `${API_BASE}/api`,
-  timeout: 15_000,
+  baseURL: '/api',
+  timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 });
 
