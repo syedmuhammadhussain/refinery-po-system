@@ -12,7 +12,13 @@ const PROCUREMENT_URL = process.env.PROCUREMENT_SERVICE_URL;
 
 // ── Middleware ──────────────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
+// app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
+app.use(
+  cors({
+    origin: ["http://localhost:3000", process.env.FRONTEND_URL],
+    credentials: true,
+  }),
+);
 
 // ── Rate limiting (simple in-memory token bucket) ──
 const rateLimit = new Map();
