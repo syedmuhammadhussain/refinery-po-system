@@ -1,4 +1,4 @@
-import pg from 'pg';
+import pg from "pg";
 
 /**
  * PostgreSQL connection pool.
@@ -17,28 +17,25 @@ import pg from 'pg';
  *
  * If DATABASE_URL is set, it takes priority. Otherwise, individual params are used.
  */
-const poolConfig = process.env.DATABASE_URL
-  ? {
+
+const pool = process.env.DATABASE_URL
+  ? new pg.Pool({
       connectionString: process.env.DATABASE_URL,
-      max: 20,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 5_000,
-    }
-  : {
-      host: process.env.DB_HOST || 'localhost',
+      ssl: { rejectUnauthorized: false },
+    })
+  : new pg.Pool({
+      host: process.env.DB_HOST,
       port: parseInt(process.env.DB_PORT) || 5432,
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'smhussain',
-      database: process.env.DB_NAME || 'catalog_db',
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
       max: 20,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 5_000,
-    };
+    });
 
-const pool = new pg.Pool(poolConfig);
-
-pool.on('error', (err) => {
-  console.error('Unexpected PostgreSQL pool error:', err.message);
+pool.on("error", (err) => {
+  console.error("Unexpected PostgreSQL pool error:", err.message);
   process.exit(1);
 });
 

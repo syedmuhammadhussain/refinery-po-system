@@ -42,7 +42,7 @@ async function start() {
     connectRabbitMQ(),
     startConsumer(),
   ]);
-  app.listen(PORT, () => logger.info(`Procurement service listening on :${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => logger.info(`Procurement service listening on :${PORT}`));
 }
 
 // ── Graceful shutdown ──────────────────────────────

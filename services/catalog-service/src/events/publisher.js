@@ -6,7 +6,7 @@ let channel = null;
 
 export async function connectRabbitMQ() {
   
-  const url = process.env.RABBITMQ_URL || 'amqp://rabbit_user:secret@rabbitmq:5672';
+  const url = process.env.RABBITMQ_URL;
   const maxRetries = 10;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {

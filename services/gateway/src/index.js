@@ -7,10 +7,8 @@ import logger from "./config/logger.js";
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-const CATALOG_URL =
-  process.env.CATALOG_SERVICE_URL || "http://catalog-service:4001";
-const PROCUREMENT_URL =
-  process.env.PROCUREMENT_SERVICE_URL || "http://procurement-service:4002";
+const CATALOG_URL = process.env.CATALOG_SERVICE_URL;
+const PROCUREMENT_URL = process.env.PROCUREMENT_SERVICE_URL;
 
 // ── Middleware ──────────────────────────────────────
 app.use(helmet());
@@ -100,4 +98,6 @@ app.use(
 );
 
 // ── Start ──────────────────────────────────────────
-app.listen(PORT, () => logger.info(`API Gateway listening on :${PORT}`));
+app.listen(PORT, "0.0.0.0", () =>
+  logger.info(`API Gateway listening on :${PORT}`),
+);

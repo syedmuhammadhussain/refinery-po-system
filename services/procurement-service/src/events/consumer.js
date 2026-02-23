@@ -10,7 +10,7 @@ const QUEUE = 'procurement.catalog-events';
  * E.g. if a catalog item is discontinued, flag draft POs that contain it.
  */
 export async function startConsumer() {
-  const url = process.env.RABBITMQ_URL || 'amqp://rabbit_user:secret@rabbitmq:5672';
+  const url = process.env.RABBITMQ_URL;
   const maxRetries = 10;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {

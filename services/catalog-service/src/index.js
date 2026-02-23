@@ -38,7 +38,7 @@ app.use(errorHandler);
 // ── Startup ────────────────────────────────────────
 async function start() {
   await connectRabbitMQ();
-  app.listen(PORT, () => logger.info(`Catalog service listening on :${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => logger.info(`Catalog service listening on :${PORT}`));
 }
 
 // ── Graceful shutdown ──────────────────────────────
