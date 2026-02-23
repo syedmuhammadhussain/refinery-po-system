@@ -9,14 +9,23 @@ const PORT = process.env.PORT || 4000;
 
 const CATALOG_URL = process.env.CATALOG_SERVICE_URL;
 const PROCUREMENT_URL = process.env.PROCUREMENT_SERVICE_URL;
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
 // ── Middleware ──────────────────────────────────────
 app.use(helmet());
-// app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
+
+// CORS — needed for direct API calls (Postman, mobile apps, etc.)
+// When using Next.js rewrites, requests come from the same origin so CORS isn't needed,
+// but we keep it for flexibility.
+const allowedOrigins = ["http://localhost:3000"];
+if (FRONTEND_URL) allowedOrigins.push(FRONTEND_URL);
+
 app.use(
   cors({
-    origin: ["http://localhost:3000", process.env.FRONTEND_URL],
+    origin: allowedOrigins,
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 
@@ -64,6 +73,9 @@ app.use(
     target: CATALOG_URL,
     pathFilter: "/api/catalog/**",
     changeOrigin: true,
+    // 60s timeout to handle Render free tier cold starts (~30-60s wake time)
+    proxyTimeout: 60_000,
+    timeout: 60_000,
     on: {
       proxyReq: (proxyReq, req) => {
         logger.info(
@@ -86,6 +98,9 @@ app.use(
     target: PROCUREMENT_URL,
     pathFilter: "/api/procurement/**",
     changeOrigin: true,
+    // 60s timeout to handle Render free tier cold starts (~30-60s wake time)
+    proxyTimeout: 60_000,
+    timeout: 60_000,
     on: {
       proxyReq: (proxyReq, req) => {
         logger.info(

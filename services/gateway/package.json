@@ -8,8 +8,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "start": "nodemon --inspect src/index.js",
-    "dev": "nodemon --inspect --watch src/index.js"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
   },
   "dependencies": {
     "cors": "2.8.5",
@@ -18,8 +18,5 @@
     "http-proxy-middleware": "3.0.5",
     "pino": "9.6.0",
     "pino-pretty": "13.0.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.11"
   }
 }
