@@ -21,8 +21,11 @@ import axios from 'axios';
  * them to the gateway. This avoids CORS issues and works in both Docker
  * and local development.
  */
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_BASE}/api`,
   timeout: 15_000,
   headers: { 'Content-Type': 'application/json' },
 });
